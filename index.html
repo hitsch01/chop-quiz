@@ -91,7 +91,7 @@
     <div class="card">
       <div class="question" id="question"></div>
       <div class="details" id="details"></div>
-      <input type="text" class="answer-input" id="answer" placeholder="Gib den Code ein (z.B. 00.0)">
+      <input type="text" class="answer-input" id="answer" placeholder="Gib den Code ein (z.B. 00.0 oder 000)">
       <button class="button" id="submit">Antwort überprüfen</button>
       <div class="result" id="result"></div>
       <div class="scoring-info">
@@ -115,7 +115,6 @@
     const QUIZ_LENGTH = 20;
     const MAX_POSSIBLE_SCORE = QUIZ_LENGTH * 10;
     
-    // Track score distribution
     let scoreDistribution = {
       perfect: 0,
       threeDigits: 0,
@@ -182,12 +181,12 @@
       const correctAnswer = quizData[currentQuestion].zcode.toLowerCase();
       const result = document.getElementById('result');
       
-      // Format the correct answer for display (with dot)
-      const displayAnswer = formatChopCode(quizData[currentQuestion].zcode.toUpperCase());
+      // Remove leading Z from display but keep original formatting
+      const displayAnswer = removeLeadingZ(quizData[currentQuestion].zcode);
       
-      // Normalize both answers by removing all non-digit characters (dots are now optional)
-      const cleanUserAnswer = userAnswer.replace(/[^\d]/g, '');
-      const cleanCorrectAnswer = correctAnswer.replace(/[^\d]/g, '');
+      // Normalize both answers by removing all non-digit characters and leading Z
+      const cleanUserAnswer = removeLeadingZ(userAnswer).replace(/[^\d]/g, '');
+      const cleanCorrectAnswer = removeLeadingZ(correctAnswer).replace(/[^\d]/g, '');
       
       let points = 0;
       let feedback = '';
@@ -247,14 +246,9 @@
       }, 1500);
     }
 
-    // Helper function to format CHOP code with dot
-    function formatChopCode(code) {
-      // If code has 3 or more characters, insert dot before the last character
-      // (e.g., "A010" becomes "A01.0", "1234" becomes "123.4")
-      if (code.length >= 3) {
-        return code.slice(0, -1) + '.' + code.slice(-1);
-      }
-      return code;
+    // Helper function to remove leading Z from codes (case insensitive)
+    function removeLeadingZ(code) {
+      return code.replace(/^z/i, '');
     }
 
     function showCompletion() {
