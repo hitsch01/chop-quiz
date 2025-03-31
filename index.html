@@ -60,6 +60,9 @@
     .correct {
       color: #34c759;
     }
+    .partial {
+      color: #ffcc00;
+    }
     .incorrect {
       color: #ff3b30;
     }
@@ -71,39 +74,63 @@
     .hidden {
       display: none;
     }
+    .scoring-info {
+      font-size: 0.8em;
+      color: #636366;
+      margin-top: 10px;
+    }
+    .score-summary {
+      margin-top: 20px;
+      font-size: 1.1em;
+    }
   </style>
 </head>
 <body>
   <div id="quiz-container">
-    <div class="progress" id="progress">Frage 1 von <span id="total-questions">0</span></div>
+    <div class="progress" id="progress">Frage 1 von 20</div>
     <div class="card">
       <div class="question" id="question"></div>
       <div class="details" id="details"></div>
-      <input type="text" class="answer-input" id="answer" placeholder="Gib den Z-Code ein (z.B. Z00.0)">
+      <input type="text" class="answer-input" id="answer" placeholder="Gib den Code ein (z.B. 00.0)">
       <button class="button" id="submit">Antwort überprüfen</button>
       <div class="result" id="result"></div>
+      <div class="scoring-info">
+        <strong>Punktesystem:</strong> 3 Punkte für erste Ziffer, 5 für zwei Ziffern, 7 für drei Ziffern, 10 für gesamten Code
+      </div>
     </div>
   </div>
   <div id="completion" class="card hidden">
     <h2>Quiz abgeschlossen!</h2>
-    <p>Du hast <span id="score">0</span> von <span id="total">0</span> Fragen richtig beantwortet.</p>
+    <p>Du hast <span id="score">0</span> von 200 möglichen Punkten erreicht.</p>
+    <p>Das entspricht <span id="percentage">0</span>%.</p>
+    <div class="score-summary" id="score-summary"></div>
     <button class="button" id="restart">Quiz neu starten</button>
   </div>
 
   <script>
+    let allQuizData = [];
     let quizData = [];
     let currentQuestion = 0;
     let score = 0;
+    const QUIZ_LENGTH = 20;
+    const MAX_POSSIBLE_SCORE = QUIZ_LENGTH * 10;
+    
+    // Track score distribution
+    let scoreDistribution = {
+      perfect: 0,
+      threeDigits: 0,
+      twoDigits: 0,
+      oneDigit: 0,
+      zero: 0
+    };
 
     document.addEventListener('DOMContentLoaded', () => {
       fetch('chop_quiz_data.json')
         .then(response => response.json())
         .then(data => {
-          quizData = data;
-          quizData = quizData.sort(() => Math.random() - 0.5);
-          document.getElementById('total-questions').textContent = quizData.length;
-          showQuestion();
-
+          allQuizData = data;
+          startNewQuiz();
+          
           document.getElementById('submit').addEventListener('click', checkAnswer);
           document.getElementById('answer').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') checkAnswer();
@@ -115,6 +142,24 @@
           document.getElementById('question').textContent = 'Fehler beim Laden der Quizdaten';
         });
     });
+
+    function startNewQuiz() {
+      currentQuestion = 0;
+      score = 0;
+      scoreDistribution = {
+        perfect: 0,
+        threeDigits: 0,
+        twoDigits: 0,
+        oneDigit: 0,
+        zero: 0
+      };
+      
+      quizData = [...allQuizData]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, QUIZ_LENGTH);
+      
+      showQuestion();
+    }
 
     function showQuestion() {
       const q = quizData[currentQuestion];
@@ -128,24 +173,73 @@
       }
       document.getElementById('answer').value = '';
       document.getElementById('result').textContent = '';
-      document.getElementById('progress').textContent = `Frage ${currentQuestion + 1} von ${quizData.length}`;
+      document.getElementById('progress').textContent = `Frage ${currentQuestion + 1} von ${QUIZ_LENGTH}`;
+      document.getElementById('answer').focus();
     }
 
     function checkAnswer() {
-      const userAnswer = document.getElementById('answer').value.trim();
-      const correctAnswer = quizData[currentQuestion].zcode;
+      const userAnswer = document.getElementById('answer').value.trim().toLowerCase();
+      const correctAnswer = quizData[currentQuestion].zcode.toLowerCase();
       const result = document.getElementById('result');
-      if (userAnswer.toUpperCase() === correctAnswer.toUpperCase()) {
-        result.textContent = 'Richtig!';
-        result.className = 'result correct';
-        score++;
+      
+      // Format the correct answer for display (with dot)
+      const displayAnswer = formatChopCode(quizData[currentQuestion].zcode.toUpperCase());
+      
+      // Normalize both answers by removing all non-digit characters (dots are now optional)
+      const cleanUserAnswer = userAnswer.replace(/[^\d]/g, '');
+      const cleanCorrectAnswer = correctAnswer.replace(/[^\d]/g, '');
+      
+      let points = 0;
+      let feedback = '';
+      
+      // Check how many digits are correct
+      let correctDigits = 0;
+      for (let i = 0; i < cleanCorrectAnswer.length; i++) {
+        if (cleanUserAnswer[i] === cleanCorrectAnswer[i]) {
+          correctDigits++;
+        } else {
+          break;
+        }
+      }
+      
+      // Award points based on correct digits
+      if (correctDigits >= cleanCorrectAnswer.length) {
+        points = 10;
+        feedback = 'Perfekt! 10 Punkte!';
+        scoreDistribution.perfect++;
+      } else if (correctDigits >= 3) {
+        points = 7;
+        feedback = `Fast richtig! 7 Punkte für die ersten drei Ziffern. Richtiger Code: ${displayAnswer}`;
+        scoreDistribution.threeDigits++;
+      } else if (correctDigits >= 2) {
+        points = 5;
+        feedback = `Teilweise richtig! 5 Punkte für die ersten zwei Ziffern. Richtiger Code: ${displayAnswer}`;
+        scoreDistribution.twoDigits++;
+      } else if (correctDigits >= 1) {
+        points = 3;
+        feedback = `Anfang richtig! 3 Punkte für die erste Ziffer. Richtiger Code: ${displayAnswer}`;
+        scoreDistribution.oneDigit++;
       } else {
-        result.textContent = `Falsch! Die richtige Antwort ist ${correctAnswer}`;
+        points = 0;
+        feedback = `Falsch! Die richtige Antwort ist ${displayAnswer}`;
+        scoreDistribution.zero++;
+      }
+      
+      score += points;
+      
+      // Display feedback
+      if (points === 10) {
+        result.className = 'result correct';
+      } else if (points > 0) {
+        result.className = 'result partial';
+      } else {
         result.className = 'result incorrect';
       }
+      result.textContent = feedback;
+
       setTimeout(() => {
         currentQuestion++;
-        if (currentQuestion < quizData.length) {
+        if (currentQuestion < QUIZ_LENGTH) {
           showQuestion();
         } else {
           showCompletion();
@@ -153,19 +247,38 @@
       }, 1500);
     }
 
+    // Helper function to format CHOP code with dot
+    function formatChopCode(code) {
+      // If code has 3 or more characters, insert dot before the last character
+      // (e.g., "A010" becomes "A01.0", "1234" becomes "123.4")
+      if (code.length >= 3) {
+        return code.slice(0, -1) + '.' + code.slice(-1);
+      }
+      return code;
+    }
+
     function showCompletion() {
       document.getElementById('quiz-container').classList.add('hidden');
       document.getElementById('completion').classList.remove('hidden');
       document.getElementById('score').textContent = score;
-      document.getElementById('total').textContent = quizData.length;
+      const percentage = Math.round((score / MAX_POSSIBLE_SCORE) * 100);
+      document.getElementById('percentage').textContent = percentage;
+      
+      const summary = document.getElementById('score-summary');
+      summary.innerHTML = `
+        <p><strong>Ergebnisübersicht:</strong></p>
+        <p>Vollständig richtig: ${scoreDistribution.perfect} × 10 Punkte</p>
+        <p>Drei Ziffern richtig: ${scoreDistribution.threeDigits} × 7 Punkte</p>
+        <p>Zwei Ziffern richtig: ${scoreDistribution.twoDigits} × 5 Punkte</p>
+        <p>Eine Ziffer richtig: ${scoreDistribution.oneDigit} × 3 Punkte</p>
+        <p>Keine Ziffer richtig: ${scoreDistribution.zero} × 0 Punkte</p>
+      `;
     }
 
     function restartQuiz() {
-      currentQuestion = 0;
-      score = 0;
-      document.getElementById('quiz-container').classList.remove('hidden');
       document.getElementById('completion').classList.add('hidden');
-      showQuestion();
+      document.getElementById('quiz-container').classList.remove('hidden');
+      startNewQuiz();
     }
   </script>
 </body>
